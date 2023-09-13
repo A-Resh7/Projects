@@ -1,0 +1,78 @@
+#install the spotipy library for this code to work!
+
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+
+# Enter your Spotify API credentials obtained from Spotify Developer account
+client_id = 'your ID'
+client_secret = 'your password'
+
+# Set your Gmail account credentials (set up 2FA and generate password for app access)
+sender_email = 'yourmail@gmail.com'
+sender_password = '16charpassword'
+receiver_email = 'recipient@domain.com'
+
+# Artists list
+artists_list = [your artists]
+
+# Authorisation
+auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+sp = spotipy.Spotify(auth_manager=auth_manager)
+
+# Function to get artists' releases 
+# (key 'album,single' gets ALL releases from an artist in case you don't want to miss singles and EP's; for albums only use 'album')
+def get_artist_releases(artist_id):
+    releases = sp.artist_albums(artist_id, album_type='album,single', limit=50)['items']
+    return releases
+
+# Function to send email notification
+def send_email(subject, body):
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+        server.quit()
+        print("Email notification sent successfully!")
+    except Exception as e:
+        print("Error sending email:", e)
+
+def main():
+    for artist_name in artists_list:
+        results = sp.search(q=artist_name, type='artist')
+        if len(results['artists']['items']) > 0:
+            artist_id = results['artists']['items'][0]['id']
+            releases = get_artist_releases(artist_id)
+            today = datetime.now()
+
+            for release in releases:
+                release_type = release.get('album_type', None)
+                release_date_str = release.get('release_date', None)
+
+                if release_type and release_date_str:
+                    try:
+                        release_date = datetime.strptime(release_date_str, "%Y-%m-%d")
+                        days_difference = (today - release_date).days
+
+                        if days_difference == 0:
+                            send_email(f"New {release_type} release from {artist_name}", f"{artist_name} released a new {release_type} today: {release['name']} ({release['release_date']})")
+                        elif days_difference == 1:
+                            send_email(f"New {release_type} release from {artist_name}", f"{artist_name} released a new {release_type} yesterday: {release['name']} ({release['release_date']})")
+                        elif days_difference == 3:
+                            send_email(f"New {release_type} release from {artist_name}", f"{artist_name} released a new {release_type} 3 days ago: {release['name']} ({release['release_date']})")
+                        elif days_difference == 7:
+                            send_email(f"New {release_type} release from {artist_name}", f"{artist_name} released a new {release_type} a week ago: {release['name']} ({release['release_date']})")
+
+                    except ValueError:
+                        continue
+
+if __name__ == "__main__":
+    main()
